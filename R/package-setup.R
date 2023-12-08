@@ -72,7 +72,7 @@ usethis::use_github()
 # A token is required in order to create and push to a new repo
 usethis::create_github_token()
 # copy token
-# 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
+# CAN'T INCLUDE TOKEN HERE OTHERWISE YOU CAN'T COMMIT
 gitcreds::gitcreds_set() # paste token here
 usethis::use_github()
 
@@ -95,7 +95,10 @@ pkgdown::build_site()
 # remote: Invalid username or password.
 # fatal: Authentication failed for 'https://github.com/SimonDedman/FIUbullshark.git/'
 
-# tried old/standard passowrd, no longer allowed.
+# tried old/standard password, no longer allowed.
+# https://github.com/settings/tokens/new
+# Generate a personal access token. Already did this above but that one doesn't work.
+# https://github.com/orgs/community/discussions/38705
 
 # go to repo settings and tell GitHub to update the website from the docs/ subdirectory
 # every time you push changes to the master branch
