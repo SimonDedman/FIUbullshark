@@ -66,9 +66,11 @@ usethis::use_github()
 # No.
 # Git commit, write commit message. Can't push.
 usethis::use_github()
-
-
-
-
-
+# Error: Unable to discover a GitHub personal access token
+# A token is required in order to create and push to a new repo
+usethis::create_github_token()
+# copy token
+# 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
+gitcreds::gitcreds_set() # paste token here
+usethis::use_github()
 
