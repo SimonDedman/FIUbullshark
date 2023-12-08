@@ -62,8 +62,10 @@ usethis::use_git()
 
 # push to Github
 usethis::use_github()
-
-
+# There are uncommitted changes and we're about to create and push to a new GitHub repo. Do you want to proceed anyway?
+# No.
+# Git commit, write commit message. Can't push.
+usethis::use_github()
 
 
 
