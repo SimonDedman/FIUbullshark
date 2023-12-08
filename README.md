@@ -23,3 +23,4 @@ library(FIUbullshark)
 ## basic example code
 ```
 
+## Code of Conduct

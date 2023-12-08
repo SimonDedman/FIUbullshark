@@ -47,11 +47,21 @@ usethis::use_test("telemetry")
 # run tests
 devtools::test()
 
+# add a usage license
+usethis::use_mit_license()
 
+# add a default code of conduct for interacting with your package
+usethis::use_code_of_conduct("simondedman@gmail.com")
+# You may also want to describe the code of conduct in your README:
+  ## Code of Conduct
+# Add this manually
 
+# Initiate Git, make first commit
+usethis::use_git()
+# R restart required
 
-
-
+# push to Github
+usethis::use_github()
 
 
 
