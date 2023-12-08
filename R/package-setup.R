@@ -90,6 +90,12 @@ pkgdown::build_site()
 # Caused by error in `library(pkg$package, character.only = TRUE)`: there is no package called ‘FIUbullshark’
 # Likely related to issue above.
 
+# push to github: git commit, push:
+# prompts to enter uname & pw. my gmail & the token above.
+# remote: Invalid username or password.
+# fatal: Authentication failed for 'https://github.com/SimonDedman/FIUbullshark.git/'
+
+# tried old/standard passowrd, no longer allowed.
 
 # go to repo settings and tell GitHub to update the website from the docs/ subdirectory
 # every time you push changes to the master branch

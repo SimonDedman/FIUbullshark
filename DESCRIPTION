@@ -1,6 +1,6 @@
 Package: FIUbullshark
 Title: A Package To Analyse Florida Bull Shark Acoustic Telemetry Data
-Version: 0.0.0.9000
+Version: 2023.12.07
 Authors@R: 
     person(given = "Simon",
            family = "Dedman",
