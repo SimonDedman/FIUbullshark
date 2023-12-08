@@ -11,7 +11,9 @@ usethis::use_r("telemetry")
 devtools::document()
 # edit the DESCRIPTION file manually, then
 usethis::use_package_doc()
-devtools::document() # gets stuck in a loop asking to Overwrite pre-existing file 'DESCRIPTION'?
+devtools::document()
+# ISSUE ####
+# gets stuck in a loop asking to Overwrite pre-existing file 'DESCRIPTION'?
 # (which we don't want) and Overwrite pre-existing file 'FIUbullshark.Rproj' which opens a new RStudio instance,
 # but the original instance wants to overwrite description again.
 # Rd for package therefore not created.
@@ -74,3 +76,30 @@ usethis::create_github_token()
 gitcreds::gitcreds_set() # paste token here
 usethis::use_github()
 
+# anyone can access
+# install.packages("remotes")
+# remotes::install_github("SimonDedman/FIUbullshark")
+
+# Publicise
+# install.packages("pkgdown")
+library(pkgdown)
+
+# Generate website files in docs/
+pkgdown::build_site()
+# Error: in callr subprocess.
+# Caused by error in `library(pkg$package, character.only = TRUE)`: there is no package called ‘FIUbullshark’
+# Likely related to issue above.
+
+
+# go to repo settings and tell GitHub to update the website from the docs/ subdirectory
+# every time you push changes to the master branch
+# https://github.com/SimonDedman/FIUbullshark/settings/pages
+# branch = master. next button select /docs. save.
+
+# push changes to git
+# git commit, select everything, add a commit message.
+# git push.
+
+# check the status of your website deployment
+# https://github.com/SimonDedman/FIUbullshark/actions
+# check this is right ####
