@@ -31,8 +31,9 @@ library(actel)
 # Created biometrics, deployments, and spatial csvs from Bull Shark Data.xlsx
 # https://hugomflavio.github.io/actel-website/manual-data.html
 loadloc <- "/home/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Data/"
-loadloc <- "C:/Users/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Data/"
-biometrics <- readr::read_csv(file.path(loadloc, "biometrics.csv")) |>
+loadloc_davon <- "C:/Users/davon/OneDrive - Florida International University/FIU Bull Sharks/DATA"
+
+biometrics <- readr::read_csv(file.path(loadloc_davon, "biometrics.csv")) |>
   dplyr::mutate(Sex = as.character("Female"))
 spatial <- readr::read_csv(file.path(loadloc, "spatial.csv"))
 deployments <- readr::read_csv(file.path(loadloc, "deployments.csv"))
