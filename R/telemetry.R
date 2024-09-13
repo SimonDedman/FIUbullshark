@@ -10,7 +10,22 @@ telemetry <- function(x) {
   x <- x + 1
 }
 
+
 library(remotes)
+
+# Covert VRL files ####
+loadloc <- "/home/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Data/VRL/"
+loadloc <- "C:/Users/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Data/VRL/"
+loadloc <- "C:/Users/davon/OneDrive - Florida International University/FIU Bull Sharks/DATA"
+# https://stackoverflow.com/questions/67745382/vemco-acoustic-telemetry-data-vrl-files-in-r
+remotes::install_github("ocean-tracking-network/glatos")
+library(glatos)
+csvfiles <- glatos::vrl2csv(vrl = loadloc,
+                            outDir = loadloc,
+                            vueExePath = "C:/Program Files (x86)/VEMCO VUE")
+AllDetections <- do.call(rbind, lapply(csvfiles, read.csv))
+
+
 remotes::install_github("hugomflavio/actel", build_opts = c("--no-resave-data", "--no-manual"), build_vignettes = TRUE)
 library(actel)
 # parallel sections bug warning https://hugomflavio.github.io/actel-website/issue_79.html
@@ -30,8 +45,6 @@ library(actel)
 # Opened vdb file with Vemco Vue software on Win10 vbox, exported Detections & Events tabs to csv.
 # Created biometrics, deployments, and spatial csvs from Bull Shark Data.xlsx
 # https://hugomflavio.github.io/actel-website/manual-data.html
-loadloc <- "/home/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Data/"
-loadloc <- "C:/Users/davon/OneDrive - Florida International University/FIU Bull Sharks/DATA"
 
 biometrics <- readr::read_csv(file.path(loadloc_davon, "biometrics.csv")) |>
   dplyr::mutate(Sex = as.character("Female"))
