@@ -264,9 +264,7 @@ base.raster <- actel::shapeToRaster(shape, # path to your shapefile, including t
                                     coord.x = "Longitude", # names of the columns containing the x and y coordinates
                                     coord.y = "Latitude",
                                     buffer = NULL) # request an expansion of the shapefile limits
-# NOTE TO HUGO ####
-# spatial param info not on webpage, type param not on webpage.
-# could use gbm.auto code to do this easily if he wants, depending on how it goes for me.
+# could use gbm.auto code to do this easily if Hugo wants, depending on how it goes for me.
 
 
 # remove stations with no deployments (possibly due to not being downloaded thus removed)
