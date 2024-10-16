@@ -13,15 +13,15 @@ telemetry <- function(x) {
 library(tidylog)
 library(remotes)
 
-loadloc <- "/home/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Data"
-loadloc <- "C:/Users/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Data"
-loadloc <- "C:/Users/davon/OneDrive - Florida International University/FIU Bull Sharks/DATA"
+loadloc <- "/home/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Data" # si linux
+loadloc <- "C:/Users/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Data" # si windows
+loadloc <- "C:/Users/davon/OneDrive - Florida International University/FIU Bull Sharks/DATA" # davon
 
-remotes::install_github("hugomflavio/actel", build_opts = c("--no-resave-data", "--no-manual"), build_vignettes = TRUE)
+# remotes::install_github("hugomflavio/actel", build_opts = c("--no-resave-data", "--no-manual"), build_vignettes = TRUE)
 library(actel)
 # parallel sections bug warning https://hugomflavio.github.io/actel-website/issue_79.html
 # create blank workspace for ACTEL which allows dumping of csv files
-actel::blankWorkspace(dir = file.path(loadloc, "actel"))
+# actel::blankWorkspace(dir = file.path(loadloc, "actel"))
 
 
 # Organise data ####
@@ -45,7 +45,7 @@ actel::blankWorkspace(dir = file.path(loadloc, "actel"))
 # Signal: code emitted by tags. Ask tag manufacturer about differences between code spaces and signals.
 # All animals need a Signal value else function crashes; flag & remove NAs
 
-print(paste0(length(which(is.na(biometrics$Signal))), " animals missing Signal values, which will be removed"))
+# print(paste0(length(which(is.na(biometrics$Signal))), " animals missing Signal values, which will be removed"))
 biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
   dplyr::mutate(Sex = as.character("Female"),
                 Shark = stringr::str_to_title(Shark),
@@ -70,6 +70,10 @@ tidyr::drop_na(Signal)
 
 ## Deployments file ####
 deployments <- readr::read_csv(file.path(loadloc, "actel",  "deployments.csv")) |>
+  dplyr::rename(Station.name = Station,
+                Receiver = "Receiver SN",
+                Start = In_ESTEDT,
+                Stop = Out_ESTEDT) |>
   dplyr::mutate(Station.name = stringr::str_to_title(Station.name),
                 Start = as.POSIXct(Start, format = "%d/%m/%Y %H:%M"),
                 Stop = as.POSIXct(Stop, format = "%d/%m/%Y %H:%M"),
@@ -84,6 +88,7 @@ deployments <- readr::read_csv(file.path(loadloc, "actel",  "deployments.csv")) 
 
 
 ## Detections file ####
+### FWCdepredationStudy file ####
 detections <- readr::read_csv(file.path(loadloc, "FWCdepredationStudy-Detections.csv")) |>
   dplyr::select(!dplyr::where(~all(is.na(.)))) |>
   dplyr::mutate(Signal = as.integer(stringr::str_sub(string = CodeSpace,
@@ -100,18 +105,19 @@ detections <- readr::read_csv(file.path(loadloc, "FWCdepredationStudy-Detections
                 Timestamp = as.POSIXct(Timestamp, format = "%d/%m/%Y %H:%M", tz = "UTC"))
 # doesn't have seconds so won't match on seconds.
 
-### Covert VRL files ####
+### Covert compile VRL files ####
+# Needs Vemco VUE in Windows
 # https://stackoverflow.com/questions/67745382/vemco-acoustic-telemetry-data-vrl-files-in-r
 # remotes::install_github("ocean-tracking-network/glatos")
-library(glatos)
-csvfiles <- glatos::vrl2csv(vrl = file.path(loadloc, "VRL/"),
-                            outDir = file.path(loadloc, "VRL/"),
-                            vueExePath = "C:/Program Files (x86)/VEMCO VUE")
+# library(glatos)
+# csvfiles <- glatos::vrl2csv(vrl = file.path(loadloc, "VRL/"),
+#                             outDir = file.path(loadloc, "VRL/"),
+#                             vueExePath = "C:/Program Files (x86)/VEMCO VUE")
 csvfiles <- list.files(path = file.path(loadloc, "VRL"),
                        pattern = ".csv",
                        full.names = TRUE)
 # remove blank files from list, don't import
-csvfiles <- csvfiles[c(7:13)]
+csvfiles <- csvfiles[c(1:7)]
 
 # 111962 AllDetections rows with VRL2CSV convert only, no FACT csvs.
 AllDetections <- do.call(rbind, lapply(csvfiles, read.csv)) |>
@@ -134,41 +140,38 @@ AllDetections <- do.call(rbind, lapply(csvfiles, read.csv)) |>
                                                        end = -1))) |>
   tidyr::drop_na(Signal) |>
   dplyr::select(Timestamp, Receiver, CodeSpace, Signal, Sensor.Value, Sensor.Unit)
+rm(csvfiles)
 
 # check overlap of old detections with new AllDetections
-oldNotInNew <- detections[which(!detections$Timestamp %in% AllDetections$Timestamp),] #|>
-# no longer matches any because AllDetections has seconds and detections doesn't.
-# dplyr::mutate(Timestamp = as.POSIXct(Timestamp, format = "%Y-%m-%d %H:%M:%S", tz = "America/New_York"))
-# 4 present which are oddly NA timestamped but clearly those entries. Manually enter.
-# AllDetections$Timestamp[29929:29932] <- oldNotInNew$Timestamp
-# AllDetections$Timestamp[28391:28393] <- oldNotInNew$Timestamp
+# Doesn't match because AllDetections has seconds and detections doesn't:
+# AllDetectionsTmp <- AllDetections |> dplyr::mutate(Timestamp = lubridate::floor_date(Timestamp, unit = "minutes"))
+# oldNotInNew <- detections[which(!detections$Timestamp %in% AllDetectionsTmp$Timestamp),] #|>
+# 2024-10-15: 0.
+# Since there are more data in AllDetections (VRL files) than detections (FWCdepredationStudy-Detections.csv), ignore the latter
+rm(detections)
+detections <- AllDetections
+rm(AllDetections)
+# rm(AllDetectionsTmp)
 # rm(oldNotInNew)
 
-rm(AllDetections)
 
-# loads of NA timestamps at the bottom of AllDetections: find which csv responsible, investigate.
-# VR2W_139045_20240923_1.csv dates not parsing but all look fine, same as other sheets. Are formatted the same.
-# Wrote a massive stackoverflow post about it, wasted 3 hours diagnosing, turns out it's excel fucking things up.
-# Just re-run glatos to correct them.
-# which(is.na(AllDetections$Timestamp))
-# tmp <- AllDetections[which(is.na(AllDetections$Timestamp)),]
 
-### read FACT detections ####
+### Read FACT detections ####
 factfiles <- list.files(path = file.path(loadloc, "FACT"),
                         pattern = ".csv",
                         full.names = TRUE)
 
 library(magrittr)
-FactDetections <- do.call(rbind, lapply(factfiles, read.csv)) |>
-  dplyr::select(!dplyr::where(~all(is.na(.)))) |>
-  dplyr::rename(CodeSpace = codespace,
+factDetections <- do.call(rbind, lapply(factfiles, read.csv)) |> # read & bind files
+  dplyr::select(!dplyr::where(~all(is.na(.)))) |> # remove blank columns
+  dplyr::rename(CodeSpace = codespace, # rename columns
                 Receiver = receiver,
                 Station.name = station,
                 Latitude = latitude,
                 Longitude = longitude) |>
-  dplyr::filter(Receiver != "release") |> # removes 15 rows, allows integer
+  dplyr::filter(Receiver != "release") |> # Removes release receiver sites, removes 15 rows, allows integer
   dplyr::mutate(
-    Timestamp = as.POSIXct(x = paste(paste(yearcollected,
+    Timestamp = as.POSIXct(x = paste(paste(yearcollected, # create timestamp from correct data from columns
                                            monthcollected,
                                            daycollected,
                                            sep = "-"),
@@ -192,17 +195,32 @@ FactDetections <- do.call(rbind, lapply(factfiles, read.csv)) |>
     Section = "Ocean", # for spatial
     Array = "A1", # for spatial
     Type = "Hydrophone" # for spatial
-  ) %T>%
-  {. |> dplyr::arrange(Receiver) |>
+  ) %T>% # spit out files an intermediary steps
+  {. |> dplyr::arrange(Receiver) |> # FACT deployments file
       dplyr::group_by(Receiver, Station.name, Stop) |>
       dplyr::summarise_all(dplyr::first) |>
       dplyr::select(Receiver, Station.name, Start, Stop) |>
       dplyr::arrange(Station.name, Stop) ->> factDeployments} %T>% # export changes to deployments
-  {. |> dplyr::select(Station.name, Latitude, Longitude, Section, Array, Type) |>
+  {. |> dplyr::select(Station.name, Latitude, Longitude, Section, Array, Type) |> # FACT spatial file
       dplyr::arrange(Station.name) |>
       dplyr::group_by(Station.name, Latitude, Longitude) |>
       dplyr::summarise_all(dplyr::first) ->> factSpatial} |>
-  dplyr::select(Timestamp, Receiver, CodeSpace, Signal, Sensor.Unit, Group)
+  dplyr::select(Timestamp, Receiver, CodeSpace, Signal, Sensor.Unit, Group) # select only columns needed
+rm(factfiles)
+
+# check overlap of factDetections with detections. Both have seconds
+# oldNotInNew <- factDetections[which(!factDetections$Timestamp %in% detections$Timestamp),] #|>
+# 2024-10-15: 2424 i.e. all factDetections.
+# rm(oldNotInNew)
+# tmp <- dplyr::bind_rows(detections |> dplyr::mutate(Source = "detections"),
+#                         factDetections |> dplyr::mutate(Source = "factDetections"))
+# rm(tmp)
+detections <- dplyr::bind_rows(detections, factDetections)
+rm(factDetections)
+
+
+
+## Deployments file part 2 ####
 
 # overwrite start dates for stations with 2+ entries
 # factDeployments |>
@@ -212,15 +230,19 @@ FactDetections <- do.call(rbind, lapply(factfiles, read.csv)) |>
 #   dplyr::filter(n > 1) |>
 #   dplyr::select(-n)
 factDeployments$Start[which(duplicated(x = factDeployments$Station.name))] <- factDeployments$Stop[which(duplicated(x = factDeployments$Station.name)) - 1]
-
 # tmp <- detections[which(duplicated(detections)),]
 
 
-## Deployments file part 2 ####
+# join ours with FACT
 deployments <- deployments |>
   dplyr::select(-Notes) |>
   dplyr::bind_rows(factDeployments)
+rm(factDeployments)
 # TODO: merge FACT/FIU station dupes####
+# princess Anne / 3: no date overlap. Should fix name?
+# St Jaques / 1 / MG111: No overlap first 2, 1/MG111 date overlap 4 days. Should fix name?
+
+
 ### Fix deployment dupes date overlap issues ####
 deployments[deployments$Receiver == 138239 & deployments$Station.name == "3", "Start"] <- deployments[deployments$Receiver == 138239 & deployments$Station.name == "Princess Anne", "Stop"]
 deployments[deployments$Receiver == 138240 & deployments$Station.name == "1", "Start"] <- deployments[deployments$Receiver == 138240 & deployments$Station.name == "St Jaques", "Stop"]
@@ -228,7 +250,7 @@ deployments[deployments$Receiver == 138240 & deployments$Station.name == "1", "S
 
 
 # Do we have a download date?
-# tmp <- FactDetections |> group_by(receiver_group, station) |> summarise(n = dplyr::n(), contact_pi = dplyr::first(contact_pi))
+# tmp <- factDetections |> group_by(receiver_group, station) |> summarise(n = dplyr::n(), contact_pi = dplyr::first(contact_pi))
 # write.csv(x = tmp,file = file.path(loadloc, "FactStations.csv"), row.names = FALSE)
 
 
@@ -248,37 +270,88 @@ spatial <- readr::read_csv(file.path(loadloc, "actel", "spatial.csv")) |>
 # dplyr::filter(Station.name != "Deep Ledge")
 # St Jaques, Governors Wrecks, 1, all same latlon
 
+#### Join spatial & FACT spatial ####
+spatial <- dplyr::bind_rows(spatial |> dplyr::mutate(Source = "spatial"),
+                            factSpatial |> dplyr::mutate(Source = "factSpatial")) |>
+  dplyr::arrange(Latitude, Longitude, Station.name) |>
+  dplyr::distinct(Latitude, Longitude, Station.name, .keep_all = TRUE) # 1 row from factSpatial added: MG111 with a slightly different location
+# TODO LatLon Dupes ####
+# LatLon dupe 1/Governors Wrecks/St Jaques
+rm(factSpatial)
 
+# remove stations with no deployments (possibly due to not being downloaded thus removed)
+# Govenors wrecks, deep ledge, jupiter: all release sites (what's the point of release sites then?)
+spatial <- spatial |> dplyr::filter(Station.name %in% deployments$Station.name)
+
+install.packages("gbm.auto")
 library(gbm.auto)
 # create shapefile and respective auxiliary files in the folder where you have your 'spatial.csv'.
-gbm.auto::gbm.basemap(bounds = c(min(spatial$Longitude),
-                                 max(spatial$Longitude),
-                                 min(spatial$Latitude),
-                                 max(spatial$Latitude)),
-                      savedir = file.path(loadloc, "actel"),
-                      extrabounds = TRUE)
+dir.create(file.path(loadloc, "actel", "NOAAcoastlines"))
+basemap <- gbm.auto::gbm.basemap(bounds = c(min(spatial$Longitude),
+                                            max(spatial$Longitude),
+                                            min(spatial$Latitude),
+                                            max(spatial$Latitude)),
+                                 savedir = file.path(loadloc, "actel", "NOAAcoastlines"),
+                                 extrabounds = TRUE)
 # convert to raster
-base.raster <- actel::shapeToRaster(shape, # path to your shapefile, including the ".shp" extension
-                                    size, # of the raster pixels in metres
+base.raster <- actel::shapeToRaster(shape = file.path(loadloc, "actel", "NOAAcoastlines", "CroppedMap", "Crop_Map.shp"), # path to your shapefile, including the ".shp" extension
+                                    size = 0.01, # of the raster pixels in metres (or possibly 100km's)
                                     spatial = spatial, # " character string specifying the path to a spatial.csv file or a spatial data frame
                                     coord.x = "Longitude", # names of the columns containing the x and y coordinates
                                     coord.y = "Latitude",
                                     buffer = NULL) # request an expansion of the shapefile limits
 # could use gbm.auto code to do this easily if Hugo wants, depending on how it goes for me.
+raster::plot(base.raster)
+points(x = spatial$Longitude,
+       y = spatial$Latitude,
+       pch = 20,
+       col = "red")
+
+### Create a transition layer ####
+t.layer <- actel::transitionLayer(base.raster,
+                                  directions = 16)
+# shapeToRaster$size = 0.001 crashed Rstudio
 
 
-# remove stations with no deployments (possibly due to not being downloaded thus removed)
-spatial <- spatial |> dplyr::filter(Station.name %in% deployments$Station.name)
 
 
 # Create distance matrix ####
 # https://hugomflavio.github.io/actel-website/manual-distances.html
 # create a shapefile that extends over all your receivers and release sites
-distances <- actel::distancesMatrix()
+distances <- actel::distancesMatrix(
+  t.layer = t.layer,
+  starters = spatial,
+  targets = spatial,
+  coord.x = "Longitude",
+  coord.y = "Latitude",
+  # id.col = NULL,
+  actel = FALSE
+)
 
 
-
-
+# Save objects ####
+dir.create(file.path(loadloc, "actel", "processed"))
+saveRDS(object = biometrics,
+        file = file.path(loadloc, "actel", "processed", "biometrics.Rds"))
+saveRDS(object = spatial,
+        file = file.path(loadloc, "actel", "processed", "spatial.Rds"))
+saveRDS(object = deployments,
+        file = file.path(loadloc, "actel", "processed", "deployments.Rds"))
+saveRDS(object = detections,
+        file = file.path(loadloc, "actel", "processed", "detections.Rds"))
+saveRDS(object = base.raster,
+        file = file.path(loadloc, "actel", "processed", "base.raster.Rds"))
+saveRDS(object = t.layer,
+        file = file.path(loadloc, "actel", "processed", "t.layer.Rds"))
+saveRDS(object = distances,
+        file = file.path(loadloc, "actel", "processed", "distances.Rds"))
+biometrics <- readRDS(file = file.path(loadloc, "actel", "processed", "biometrics.Rds"))
+spatial <- readRDS(file = file.path(loadloc, "actel", "processed", "spatial.Rds"))
+deployments <- readRDS(file = file.path(loadloc, "actel", "processed", "deployments.Rds"))
+detections <- readRDS(file = file.path(loadloc, "actel", "processed", "detections.Rds"))
+base.raster <- readRDS(file = file.path(loadloc, "actel", "processed", "base.raster.Rds"))
+t.layer <- readRDS(file = file.path(loadloc, "actel", "processed", "t.layer.Rds"))
+distances <- readRDS(file = file.path(loadloc, "actel", "processed", "distances.Rds"))
 
 
 
@@ -287,7 +360,7 @@ mypreload <- actel::preload(biometrics = biometrics,
                             spatial = spatial,
                             deployments = deployments,
                             detections = detections,
-                            # distances = distances,
+                            distances = distances,
                             tz = "UTC") # America/New_York
 # M: Preloaded Release dates are already in POSIX format. Skipping timestamp format checks.
 # Warning: Potential mismatch between release dates time zone (UTC) and 'tz' argument (America/New_York)! This could cause unwanted timelapses!
