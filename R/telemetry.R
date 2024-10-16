@@ -239,15 +239,19 @@ deployments <- deployments |>
   dplyr::bind_rows(factDeployments)
 rm(factDeployments)
 # TODO: merge FACT/FIU station dupes####
-# princess Anne / 3: no date overlap. Should fix name?
-# St Jaques / 1 / MG111: No overlap first 2, 1/MG111 date overlap 4 days. Should fix name?
-
-
 ### Fix deployment dupes date overlap issues ####
 deployments[deployments$Receiver == 138239 & deployments$Station.name == "3", "Start"] <- deployments[deployments$Receiver == 138239 & deployments$Station.name == "Princess Anne", "Stop"]
 deployments[deployments$Receiver == 138240 & deployments$Station.name == "1", "Start"] <- deployments[deployments$Receiver == 138240 & deployments$Station.name == "St Jaques", "Stop"]
+# princess Anne / 3: no date overlap. Should fix name?
+# St Jaques / 1 / MG111: No overlap first 2, 1/MG111 date overlap 4 days. Should fix name?
+# FORCEFIX, check this ####
+deployments[deployments$Receiver == 139043 & deployments$Station.name == "Princess Anne", "Start"] <- deployments[deployments$Receiver == 138239 & deployments$Station.name == "Princess Anne", "Stop"]
+deployments[deployments$Receiver == 138240 & deployments$Station.name == "MG111", "Start"] <- deployments[deployments$Receiver == 138240 & deployments$Station.name == "1", "Stop"]
 
+# deployments[deployments$Station.name == "1", "Stop"] <- as.POSIXct("2023-10-06", format = "%Y-%m-%d", tz = "UTC") # deployments 1 change stop to 2023-10-06
+# deployments[deployments$Station.name == "Princess Anne", "Stop"] <- as.POSIXct("2022-05-07", format = "%Y-%m-%d", tz = "UTC")
 
+tmp <- deployments |> dplyr::mutate(timediff = Stop - Start)
 
 # Do we have a download date?
 # tmp <- factDetections |> group_by(receiver_group, station) |> summarise(n = dplyr::n(), contact_pi = dplyr::first(contact_pi))
@@ -282,6 +286,11 @@ rm(factSpatial)
 # remove stations with no deployments (possibly due to not being downloaded thus removed)
 # Govenors wrecks, deep ledge, jupiter: all release sites (what's the point of release sites then?)
 spatial <- spatial |> dplyr::filter(Station.name %in% deployments$Station.name)
+
+# Remove stations with duplicated values
+spatial <- spatial |>
+  dplyr::filter(Source != "factSpatial") |> # this was MG111
+  dplyr::select(!Source) # not being used for anything now
 
 install.packages("gbm.auto")
 library(gbm.auto)
@@ -432,16 +441,115 @@ mypreload <- actel::preload(biometrics = biometrics,
 # Stray tags were detected in your study area. Would you like to save a summary to stray_tags.csv?(y/n)
 # [1] "C:/Users/simon/Documents/Si Work/PostDoc Work/FIU/2023-10 Bull Shark Acoustic Telemetry/Code/FIUbullshark/stray_tags.csv"
 
+# 2024-10-15
+# M: Preloaded Release dates are already in POSIX format. Skipping timestamp format checks.
+# M: No Code.space column was found in the biometrics. Assigning code spaces based on detections.
+# Warning: Long group names detected. To improve graphic rendering, consider keeping group names under six characters.
+# M: Number of target tags: 18.
+# M: Preloaded deployment times are already in POSIX format. Skipping timestamp format checks.
+# Error: Receiver 138240 was re-deployed before being retrieved:
+# 6    St Jaques   138240          NA                 NA 2022-06-29 2023-07-14          success            NA 26.75152 -80.01010           VR2W               NA VR2W_138240_20230718_1.vrl              90
+# 8            1   138240          NA                 NA 2023-07-14 2023-10-10             <NA>            NA       NA        NA           <NA>               NA                       <NA>              NA
+# 2        MG111   138240          NA                 NA 2023-10-06 2024-07-31          success            NA 26.97735 -80.02477           VR2W               NA VR2W_138240_20240801_1.vrl              65
+# Mooring Components
+# 6 poly pro spliced onto wreck (5), foam float (1)
+# 8                                            <NA>
+# 2                                            <NA>  <- !!!
+# Error: Fatal exception found. Read lines above for more details.
+
+# 2024-10-15
+# Force fixed that above.
+# Error in if (any(link <- input$Start > input$Stop)) { : missing value where TRUE/FALSE needed
+
+# Error: Receiver 138239 was re-deployed before being retrieved:
+# 3  Princess Anne   138239          NA                 NA 2022-05-05 00:00:00 2023-05-25          success            NA 26.79355 -80.00385           VR2W               NA VR2W_138239_20230526_1.vrl              90 poly pro spliced onto wreck (5), foam float (1)
+# 14             3   138239          NA                 NA 2022-05-07 15:30:02 2023-10-10             <NA>            NA       NA        NA           <NA>               NA                       <NA>              NA                                            <NA>  <- !!!
+# Force fixed.
+
+# Error: Some deployment periods end before they have started! Please fix this before continuing. Troublesome rows: 4
+# Force fixed.
+
+# Error: The 'Station.name' column in the spatial input must not have duplicated values. Stations appearing more than once: MG111
+
+
+# M: Preloaded Release dates are already in POSIX format. Skipping timestamp format checks.
+# M: No Code.space column was found in the biometrics. Assigning code spaces based on detections.
+# Warning: Long group names detected. To improve graphic rendering, consider keeping group names under six characters.
+# M: Number of target tags: 18.
+# M: Preloaded deployment times are already in POSIX format. Skipping timestamp format checks.
+# Warning: The 'Signal' column in the detections is not of type integer. Attempting to convert.
+# Warning: The 'Receiver' column in the detections is not of type integer. Attempting to convert.
+# Warning: Release sites were not specified in the spatial.csv file. Attempting to assume all released animals start at the top level array.
+# M: Matching detections with deployment periods.
+# Error: 18 detections for receiver 134302 do not fall within deployment periods.
+#
+# Timestamp Receiver CodeSpace Signal Sensor.Value Sensor.Unit  Group
+# <POSc>   <char>    <char>  <int>        <int>      <char> <char>
+# 1: 2023-08-28 01:08:12   134302  A69-9001  57458           NA        <NA>   Bull
+# 2: 2023-08-28 01:09:11   134302  A69-9001  57458           NA        <NA>   Bull
+# 3: 2023-08-28 01:10:48   134302  A69-9001  57458           NA        <NA>   Bull
+# 4: 2023-08-28 01:13:39   134302  A69-9001  57458           NA        <NA>   Bull
+# 5: 2023-08-28 12:28:22   134302  A69-9001  57458           NA        <NA>   Bull
+# 6: 2023-08-28 12:29:12   134302  A69-9001  57458           NA        <NA>   Bull
+# 7: 2023-08-28 12:29:51   134302  A69-9001  57458           NA        <NA>   Bull
+# 8: 2023-08-28 12:31:13   134302  A69-9001  57458           NA        <NA>   Bull
+# 9: 2023-08-28 12:31:58   134302  A69-9001  57458           NA        <NA>   Bull
+# 10: 2023-08-28 12:33:33   134302  A69-9001  57458           NA        <NA>   Bull
+# 11: 2023-08-28 12:39:20   134302  A69-9001  57458           NA        <NA>   Bull
+# 12: 2023-08-29 00:32:42   134302  A69-9001  57458           NA        <NA>   Bull
+# 13: 2023-09-08 04:24:20   134302  A69-9001  57458           NA        <NA>   Bull
+# 14: 2023-09-08 04:27:39   134302  A69-9001  57458           NA        <NA>   Bull
+# 15: 2023-09-08 04:28:36   134302  A69-9001  57458           NA        <NA>   Bull
+# 16: 2023-09-08 04:30:10   134302  A69-9001  57458           NA        <NA>   Bull
+# 17: 2023-09-08 04:30:54   134302  A69-9001  57458           NA        <NA>   Bull
+# 18: 2023-09-08 04:31:45   134302  A69-9001  57458           NA        <NA>   Bull
+#
+# Possible options:
+# a) Stop and double-check the data (recommended)
+# b) Discard orphan detections in this instance.
+# c) Discard orphan detections for all instances.
+# d) Save orphan detections to a file and re-open dialogue.
+# C
+
+# Error: 100 detections for receiver 138240 do not fall within deployment periods. Discarding orphan detections.
+# Error: 12 detections for receiver 484731 do not fall within deployment periods. Discarding orphan detections.
+# Error: 31 detections for receiver 484823 do not fall within deployment periods. Discarding orphan detections.
+
+# Warning: The column and row names in the distances matrix do not match each other. Deactivating speed calculations to avoid function failure.
+# Row names missing in the columns: '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45'.
+# Column names missing in the rows: 'X1', 'X2', 'X3', 'X4', 'X5', 'X6', 'X7', 'X8', 'X9', 'X10', 'X11', 'X12', 'X13', 'X14', 'X15', 'X16', 'X17', 'X18', 'X19', 'X20', 'X21', 'X22', 'X23', 'X24', 'X25', 'X26', 'X27', 'X28', 'X29', 'X30', 'X31', 'X32', 'X33', 'X34', 'X35', 'X36', 'X37', 'X38', 'X39', 'X40', 'X41', 'X42', 'X43', 'X44', 'X45'.
+
+# Stray tags were detected in your study area. Would you like to save a summary to stray_tags.csv?(y/n) y
+
+# Warning: Tag A69-9001-57458 was detected before being released!
+# Release time: 2023-06-29 11:36:00
+# First detection time: 2023-06-28 20:32:56
+# Number of detections before release: 31
+#
+# Possible options:
+# a) Stop and double-check the data (recommended)
+# b) Discard orphan detections in this instance.
+# c) Discard orphan detections for all instances.
+# d) Save orphan detections to a file and re-open dialogue.
+
+# M: 31 detection(s) from tag A69-9001-57458 removed per user command.
+# M: Data successfully imported!
+
+
+
+
+
+
+
 
 
 
 # Summary & Explore ####
 # Get summary of data
-install.packages("gWidgets2tcltk")
+# install.packages("gWidgets2tcltk")
 library(gWidgets2tcltk)
-getwd()
-dir.create(file.path("..", "..", "data", "actel", "explore"))
-setwd(file.path("..", "..", "data", "actel", "explore"))
+# dir.create(file.path(loadloc, "actel", "explore"))
+setwd(file.path(loadloc, "actel", "explore"))
 exploreResults <- actel::explore(datapack = mypreload,
                                  tz = NULL, # tz = "America/New_York", not needed if datapack provided
                                  max.interval = 60, # number of minutes that must pass between detections for a new event to be created
@@ -469,11 +577,13 @@ exploreResults <- actel::explore(datapack = mypreload,
                                  print.releases = TRUE, # print release sites on study area diagrams
                                  detections.y.axis = c("auto", "stations", "arrays")) # for individual detection plots
 
-# M: Creating movement records for the valid tags.
-# M: Checking movement events quality.
 # Warning: 'speed.warning'/'speed.error' were not set, skipping speed checks.
 # Warning: 'inactive.warning'/'inactive.error' were not set, skipping inactivity checks.
-# Warning: Tag A69-9001-52503 (1/6) has less than 2 detections in total. Discarding this tag.
+# Warning: Tag A69-9001-52506 (3/11) has fewer than 2 detections in total. Discarding this tag.
+# Warning: Tag A69-9001-52511 (5/11) has fewer than 2 detections in total. Discarding this tag.
+
+
+
 
 
 # Migration ####
@@ -509,11 +619,14 @@ migrationsResults <- actel::migration(
   print.releases = TRUE,
   detections.y.axis = c("auto", "stations", "arrays")
 )
-# M: Running analysis on preloaded data (compiled on 2024-10-01 14:21:21.630737).
-# M: 'disregard.parallels' is set to FALSE; the presence of parallel arrays can potentially invalidate efficiency peers.
 # Warning: 'success.arrays' was not defined. Assuming success if the tags are last detected at array A1.
-# Error in apply(x, 1, function(i) i[1] != i[2]): dim(X) must have a positive length
-# M: The analysis errored. You can recover latest the job log (including your comments and decisions) by running recoverLog().
+# Warning: 'speed.warning'/'speed.error' were not set, skipping speed checks.
+# Warning: 'inactive.warning'/'inactive.error' were not set, skipping inactivity checks.
+# Warning: Tag A69-9001-52506 (3/11) has fewer than 2 detections in total. Discarding this tag.
+# Warning: Tag A69-9001-52511 (5/11) has fewer than 2 detections in total. Discarding this tag.
+# Warning: None of the arrays has valid efficiency peers.
+# Warning: Aborting inter-array efficiency calculations (will limit the report's output).
+
 
 
 
@@ -551,5 +664,12 @@ residencyResults <- actel::residency(
   detections.y.axis = c("auto", "stations", "arrays")
 )
 
-M: Producing the report.
-Error in x[, sections[link]] <- 0 : incorrect number of subscripts on matrix
+# Warning: 'speed.warning'/'speed.error' were not set, skipping speed checks.
+# Warning: 'inactive.warning'/'inactive.error' were not set, skipping inactivity checks.
+# Warning: Tag A69-9001-52506 (3/11) has fewer than 2 detections in total. Discarding this tag.
+# Warning: Tag A69-9001-52511 (5/11) has fewer than 2 detections in total. Discarding this tag.
+
+
+
+# TODO ####
+# All stations being Array==A1 & Section==Ocean disallows actel from doing much useful. Change in spatial
