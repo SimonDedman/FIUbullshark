@@ -51,7 +51,7 @@ biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
                 Shark = stringr::str_to_title(Shark),
                 Location = stringr::str_to_title(Location),
                 # TODO columns to factors asked ####
-                # Make Shark, Sex, Release.site into factors? ASKED
+                # Make Shark, Sex, Release.site into factors? ASKED https://github.com/hugomflavio/actel/issues/130
                 Signal = as.integer(Signal),
                 ExternalTag = as.integer(ExternalTag),
                 Release.date = as.POSIXct(Release.date, format = "%d/%m/%Y %H:%M", tz = "UTC")) |>
@@ -61,8 +61,6 @@ biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
                 Group = Shark
   ) |>
   # dplyr::filter(Group == "Bull") |> # remove non bulls for now
-  # TODO column name format asked ####
-# check if this can be "Length" rather than "length"? ASKED
 tidyr::drop_na(Signal)
 
 
@@ -238,20 +236,18 @@ deployments <- deployments |>
   dplyr::select(-Notes) |>
   dplyr::bind_rows(factDeployments)
 rm(factDeployments)
-# TODO: merge FACT/FIU station dupes####
-### Fix deployment dupes date overlap issues ####
+# write.csv(x = deployments,
+#           file = file.path(loadloc, "actel", "processed", "deployments_toFix.csv"),
+#           row.names = FALSE)
+# TODO? merge FACT/FIU station dupes####
+### FORCEFIX deployment dupes date overlap issues ####
 deployments[deployments$Receiver == 138239 & deployments$Station.name == "3", "Start"] <- deployments[deployments$Receiver == 138239 & deployments$Station.name == "Princess Anne", "Stop"]
 deployments[deployments$Receiver == 138240 & deployments$Station.name == "1", "Start"] <- deployments[deployments$Receiver == 138240 & deployments$Station.name == "St Jaques", "Stop"]
 # princess Anne / 3: no date overlap. Should fix name?
 # St Jaques / 1 / MG111: No overlap first 2, 1/MG111 date overlap 4 days. Should fix name?
-# FORCEFIX, check this ####
 deployments[deployments$Receiver == 139043 & deployments$Station.name == "Princess Anne", "Start"] <- deployments[deployments$Receiver == 138239 & deployments$Station.name == "Princess Anne", "Stop"]
 deployments[deployments$Receiver == 138240 & deployments$Station.name == "MG111", "Start"] <- deployments[deployments$Receiver == 138240 & deployments$Station.name == "1", "Stop"]
-
-# deployments[deployments$Station.name == "1", "Stop"] <- as.POSIXct("2023-10-06", format = "%Y-%m-%d", tz = "UTC") # deployments 1 change stop to 2023-10-06
-# deployments[deployments$Station.name == "Princess Anne", "Stop"] <- as.POSIXct("2022-05-07", format = "%Y-%m-%d", tz = "UTC")
-
-tmp <- deployments |> dplyr::mutate(timediff = Stop - Start)
+tmp <- deployments |> dplyr::mutate(timediff = Stop - Start) # check if any deployments stop before they start
 
 # Do we have a download date?
 # tmp <- factDetections |> group_by(receiver_group, station) |> summarise(n = dplyr::n(), contact_pi = dplyr::first(contact_pi))
@@ -273,6 +269,9 @@ spatial <- readr::read_csv(file.path(loadloc, "actel", "spatial.csv")) |>
 # Error: The following station is listed in the spatial file but no receivers were ever deployed there: 'Deep Ledge'
 # dplyr::filter(Station.name != "Deep Ledge")
 # St Jaques, Governors Wrecks, 1, all same latlon
+# write.csv(x = spatial,
+#           file = file.path(loadloc, "actel", "processed", "spatial_toFix.csv"),
+#           row.names = FALSE)
 
 #### Join spatial & FACT spatial ####
 spatial <- dplyr::bind_rows(spatial |> dplyr::mutate(Source = "spatial"),
@@ -572,6 +571,7 @@ exploreResults <- actel::explore(datapack = mypreload,
                                  discard.first = NULL, # hours after release to begin counting detections as valid
                                  save.detections = FALSE, # save processed detections for future runs?
                                  ## HUGO NOTE: manpage unclear why user would want this ####
+                                 # https://github.com/hugomflavio/actel/issues/111
                                  GUI = c("needed", "always", "never"),
                                  save.tables.locally = FALSE, # only if too big for R console/whenever possibility to invalidate events/never
                                  print.releases = TRUE, # print release sites on study area diagrams
