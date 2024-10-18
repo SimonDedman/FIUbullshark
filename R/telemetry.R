@@ -1,4 +1,4 @@
-#' Function to do telemetry analysis booger
+#' Function to do telemetry analysis
 #'
 #' @param x Dummy param.
 #'
