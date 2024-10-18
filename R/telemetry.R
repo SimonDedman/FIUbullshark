@@ -47,22 +47,85 @@ library(actel)
 
 # print(paste0(length(which(is.na(biometrics$Signal))), " animals missing Signal values, which will be removed"))
 biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
-  dplyr::mutate(Sex = as.character("Female"),
-                Shark = stringr::str_to_title(Shark),
-                Location = stringr::str_to_title(Location),
-                # TODO columns to factors asked ####
-                # Make Shark, Sex, Release.site into factors? ASKED https://github.com/hugomflavio/actel/issues/130
-                Signal = as.integer(Signal),
-                ExternalTag = as.integer(ExternalTag),
-                Release.date = as.POSIXct(Release.date, format = "%d/%m/%Y %H:%M", tz = "UTC")) |>
-  dplyr::rename(Release.site = Location,
+  dplyr::mutate(
+    time_tagged = as.character(time_tagged),
+    time_tagged = dplyr::case_match(
+      time_tagged,
+      NA ~ as.character("00:00:00"),
+      .default = time_tagged),
+    Release.date = as.POSIXct(paste(date_encountered, time_tagged),
+                              format = "%Y-%m-%d %H:%M",
+                              tz = "America/New_York"),
+    Release.date = lubridate::with_tz(Release.date, tzone = "UTC"), # change to UTC
+    tag_location = stringr::str_to_title(tag_location),
+    species = stringr::str_to_title(species),
+    sex = dplyr::case_match(
+      sex,
+      "M" ~ "Male",
+      "F" ~ "Female",
+      .default = sex),
+    # Make species, Sex, Release.site into factors? ASKED https://github.com/hugomflavio/actel/issues/130
+    clasper_inner_length_cm = as.numeric(clasper_inner_length_cm),
+    clasper_outer_length_cm = as.numeric(clasper_outer_length_cm),
+    Mature = as.logical(dplyr::case_match(
+      Mature,
+      "Y" ~ TRUE,
+      "N" ~ FALSE,
+      .default = as.logical(NA))),
+    pectoral_fin_girth_cm = as.numeric(pectoral_fin_girth_cm),
+    dorsal_fin_girth_cm = as.numeric(dorsal_fin_girth_cm),
+    weight_kg = as.numeric(weight_kg),
+    CodeSpace = as.integer(stringr::str_sub(string = acoustic_transmitter,
+                                            start = 5,
+                                            end = 8)),
+    CodeSpaceSignal = paste(CodeSpace, acoustic_transmitter_ID, sep = "-"),
+    acoustic_transmitter_ID = as.integer(acoustic_transmitter_ID),
+    ID_tag_leader_number = as.integer(ID_tag_leader_number),
+    ID_tag_side = as.character(ID_tag_side),
+    # Correct column types when populated
+    dorsal_fin_clip = as.logical(dplyr::case_match(
+      dorsal_fin_clip,
+      "Y" ~ TRUE,
+      "N" ~ FALSE,
+      .default = as.logical(NA))),
+    mortality_expected = as.logical(dplyr::case_match(
+      mortality_expected,
+      "Y" ~ TRUE,
+      "N" ~ FALSE,
+      .default = as.logical(NA))),
+    capture_depth_m = (capture_depth_ft * 0.3048)
+  ) |>
+  dplyr::rename(Release.site = tag_location,
+                # release.site used in report
+                # Does anything use release site/blank cells in other sheets?
                 # Existing columns length, weight, mass: distribution graphics drawn per animal group in report.
                 # length = Length.mm
-                Group = Shark
+                Group = species,
+                Latitude = latitude,
+                Longitude = longitude,
+                Sex = sex,
+                Signal = acoustic_transmitter_ID
   ) |>
   # dplyr::filter(Group == "Bull") |> # remove non bulls for now
-tidyr::drop_na(Signal)
-
+  tidyr::drop_na(Signal) |>
+  dplyr::select(
+    Release.date,
+    date_encountered,
+    time_tagged,
+    Release.site,
+    Latitude,
+    Longitude,
+    capture_method,
+    capture_depth_ft,
+    capture_depth_m,
+    Group,
+    Sex:acoustic_transmitter,
+    CodeSpace,
+    Signal,
+    CodeSpaceSignal:Notes
+  )
+dir.create(file.path(loadloc, "actel", "processed"))
+saveRDS(object = biometrics, file = file.path(loadloc, "actel", "processed", "biometrics.Rds"))
 
 
 
@@ -72,13 +135,19 @@ deployments <- readr::read_csv(file.path(loadloc, "actel",  "deployments.csv")) 
                 Receiver = "Receiver SN",
                 Start = In_ESTEDT,
                 Stop = Out_ESTEDT) |>
-  dplyr::mutate(Station.name = stringr::str_to_title(Station.name),
-                Start = as.POSIXct(Start, format = "%d/%m/%Y %H:%M"),
-                Stop = as.POSIXct(Stop, format = "%d/%m/%Y %H:%M"),
-                Station.name = dplyr::case_match(
-                  Station.name,
-                  "Mg111" ~ "MG111",
-                  .default = Station.name)) |>
+  dplyr::mutate(
+    Station.name = stringr::str_to_title(Station.name),
+    Start = as.POSIXct(Start, format = "%d/%m/%Y %H:%M", tz = "America/New_York"),
+    Stop = as.POSIXct(Stop, format = "%d/%m/%Y %H:%M", tz = "America/New_York"),
+    # Raw data in ETC, timeshift to UTC. Currently moot as all downloaded receivers
+    Start = lubridate::with_tz(Start, tzone = "UTC"), # change to UTC
+    Stop = lubridate::with_tz(Stop, tzone = "UTC"), # change to UTC
+    Station.name = dplyr::case_match(
+      Station.name,
+      "Mg111" ~ "MG111",
+      .default = Station.name),
+    ReceiverDepthM = (ReceiverDepthFt * 0.3048)
+  ) |>
   tidyr::drop_na(Start, Stop) # remove undownloaded receivers as they crash preload
 
 
@@ -86,22 +155,30 @@ deployments <- readr::read_csv(file.path(loadloc, "actel",  "deployments.csv")) 
 
 
 ## Detections file ####
+
 ### FWCdepredationStudy file ####
-detections <- readr::read_csv(file.path(loadloc, "FWCdepredationStudy-Detections.csv")) |>
-  dplyr::select(!dplyr::where(~all(is.na(.)))) |>
-  dplyr::mutate(Signal = as.integer(stringr::str_sub(string = CodeSpace,
-                                                     start = 10,
-                                                     end = -1)),
-                CodeSpace = stringr::str_sub(string = CodeSpace,
-                                             start = 1,
-                                             end = 8),
-                Receiver = as.integer(Receiver),
-                Station.name = dplyr::case_match(
-                  Station.name,
-                  "Mg111" ~ "MG111",
-                  .default = Station.name),
-                Timestamp = as.POSIXct(Timestamp, format = "%d/%m/%Y %H:%M", tz = "UTC"))
-# doesn't have seconds so won't match on seconds.
+# Archive FWCdepredationStudy-Detections.csv & comment out this section since it's not used
+# detections <- readr::read_csv(file.path(loadloc, "FWCdepredationStudy-Detections.csv")) |>
+#   dplyr::select(!dplyr::where(~all(is.na(.)))) |>
+#   dplyr::mutate(Signal = as.integer(stringr::str_sub(string = CodeSpace,
+#                                                      start = 10,
+#                                                      end = -1)),
+#                 # TODO codespace is middle 4 digits only ####
+#                 # Change here & elsewhere
+#                 # Copy & comment out original code in case new format kills the crab
+#                 CodeSpace = stringr::str_sub(string = CodeSpace,
+#                                              start = 5,
+#                                              end = 8),
+#                 Receiver = as.integer(Receiver),
+#                 Station.name = dplyr::case_match(
+#                   Station.name,
+#                   "Mg111" ~ "MG111",
+#                   .default = Station.name),
+#                 Timestamp = as.POSIXct(Timestamp, format = "%d/%m/%Y %H:%M", tz = "America/New_York"),
+#                 Timestamp = lubridate::with_tz(Timestamp, tzone = "UTC") # change to UTC
+#                 # doesn't have seconds so won't match on seconds.
+#   )
+
 
 ### Covert compile VRL files ####
 # Needs Vemco VUE in Windows
@@ -111,33 +188,46 @@ detections <- readr::read_csv(file.path(loadloc, "FWCdepredationStudy-Detections
 # csvfiles <- glatos::vrl2csv(vrl = file.path(loadloc, "VRL/"),
 #                             outDir = file.path(loadloc, "VRL/"),
 #                             vueExePath = "C:/Program Files (x86)/VEMCO VUE")
+
+# TODO find out if vrl2csv corrects for clock drift ####
+# If not Em has a tool in R
+
+# TODO code this to only convert new VRL files which haven't yet been converted ####
+# Query against deployment log for deployments$Filename
+# Need a way to keep track of which filenames have been done - see blocklab process
 csvfiles <- list.files(path = file.path(loadloc, "VRL"),
-                       pattern = ".csv",
+                       pattern = "^VR2W_.*csv$", # ^starts with (VR2W_), .* unbounded sequence of characters, $ ends with csv
+                       # avoids importing RLD files which are blank
                        full.names = TRUE)
-# remove blank files from list, don't import
-csvfiles <- csvfiles[c(1:7)]
 
 # 111962 AllDetections rows with VRL2CSV convert only, no FACT csvs.
-AllDetections <- do.call(rbind, lapply(csvfiles, read.csv)) |>
+detections <- do.call(rbind, lapply(csvfiles, read.csv)) |>
   # remove NA columns: transmitter name, transmitter serial, station name, lat, lon, transmitter type, sensor precision.
   dplyr::select(!dplyr::where(~all(is.na(.)))) |>
   dplyr::mutate(Timestamp = as.POSIXct(Date.and.Time..UTC.,
                                        format = "%Y-%m-%d %H:%M:%S", # all bar VR2W_139045_20240923_1.csv work
                                        tz = "UTC"),  # "America/New_York"
-                # Is the last block of numbers in detections$CodeSpace the same as (no NA) biometrics$Serial?
-                # all(biometrics$Serial[which(!is.na(biometrics$Serial))] %in% as.numeric(unique(stringr::str_sub(string = detections$CodeSpace,
-                # start = 10, end = -1)))) # TRUE
-                Signal = as.numeric(stringr::str_sub(string = Transmitter,
+                Signal = as.integer(stringr::str_sub(string = Transmitter,
                                                      start = 10,
                                                      end = -1)),
-                CodeSpace = stringr::str_sub(string = Transmitter,
-                                             start = 1,
-                                             end = 8),
-                Receiver = as.numeric(stringr::str_sub(string = Receiver,
+                CodeSpace = as.integer(stringr::str_sub(string = Transmitter,
+                                                        start = 5,
+                                                        end = 8)),
+                CodeSpaceSignal = paste(CodeSpace, Signal, sep = "-"),
+                Receiver = as.integer(stringr::str_sub(string = Receiver,
                                                        start = 6,
                                                        end = -1))) |>
   tidyr::drop_na(Signal) |>
-  dplyr::select(Timestamp, Receiver, CodeSpace, Signal, Sensor.Value, Sensor.Unit)
+  # filter out non-yannis sharks (Signal) via biometrics$acoustic_transmitter
+  dplyr::filter(CodeSpaceSignal %in% unique(biometrics$CodeSpaceSignal)) |> # 124149 before, 1534 after
+  # FROMHERE 2024-10-17 SD ####
+  # Could do this elsewhere? FACT detections is only our animals
+  # Or could/also do this for FACT detections as well to ensure we're not analysing other people's animals.
+  dplyr::select(Timestamp, Receiver, CodeSpace, Signal, CodeSpaceSignal, Sensor.Value, Sensor.Unit)
+
+
+unique(detections$CodeSpaceSignal) %in% unique(biometrics$CodeSpaceSignal)
+
 rm(csvfiles)
 
 # check overlap of old detections with new AllDetections
@@ -146,9 +236,9 @@ rm(csvfiles)
 # oldNotInNew <- detections[which(!detections$Timestamp %in% AllDetectionsTmp$Timestamp),] #|>
 # 2024-10-15: 0.
 # Since there are more data in AllDetections (VRL files) than detections (FWCdepredationStudy-Detections.csv), ignore the latter
-rm(detections)
-detections <- AllDetections
-rm(AllDetections)
+# rm(detections)
+# detections <- AllDetections
+# rm(AllDetections)
 # rm(AllDetectionsTmp)
 # rm(oldNotInNew)
 
@@ -160,6 +250,7 @@ factfiles <- list.files(path = file.path(loadloc, "FACT"),
                         full.names = TRUE)
 
 library(magrittr)
+
 factDetections <- do.call(rbind, lapply(factfiles, read.csv)) |> # read & bind files
   dplyr::select(!dplyr::where(~all(is.na(.)))) |> # remove blank columns
   dplyr::rename(CodeSpace = codespace, # rename columns
@@ -168,32 +259,40 @@ factDetections <- do.call(rbind, lapply(factfiles, read.csv)) |> # read & bind f
                 Latitude = latitude,
                 Longitude = longitude) |>
   dplyr::filter(Receiver != "release") |> # Removes release receiver sites, removes 15 rows, allows integer
-  dplyr::mutate(
-    Timestamp = as.POSIXct(x = paste(paste(yearcollected, # create timestamp from correct data from columns
-                                           monthcollected,
-                                           daycollected,
-                                           sep = "-"),
-                                     paste(floor(timeofday),
-                                           floor((timeofday - floor(timeofday)) * 60), # decimal minutes,
-                                           (((timeofday - floor(timeofday)) * 60) - floor((timeofday - floor(timeofday)) * 60)) * 60, # decimal seconds
-                                           sep = ":"),
-                                     sep = " "),
-                           tz = "UTC"),
-    Start = min(Timestamp, na.rm = TRUE), # for deployments, default populate with earliest possible date
-    Stop = as.POSIXct(datelastmodified, format = "%m/%d/%Y", tz = "UTC"), # for deployments, when receivers were downloaded
-    Receiver = as.integer(Receiver),
-    Group = stringr::str_to_title(dplyr::case_match(
-      commonname,
-      "bull shark" ~ "Bull",
-      .default = commonname)),
-    Signal = as.numeric(stringr::str_sub(string = tagname,
-                                         start = 10,
-                                         end = -1)),
-    Sensor.Unit = as.character(NA),
-    Section = "Ocean", # for spatial
-    Array = "A1", # for spatial
-    Type = "Hydrophone" # for spatial
-  ) %T>% # spit out files an intermediary steps
+  # TODO should retain releases? ####
+dplyr::mutate(
+  # TODO fix codespace here ####
+  Timestamp = as.POSIXct(x = paste(paste(yearcollected, # create timestamp from correct data from columns
+                                         monthcollected,
+                                         daycollected,
+                                         sep = "-"),
+                                   paste(floor(timeofday),
+                                         floor((timeofday - floor(timeofday)) * 60), # decimal minutes,
+                                         (((timeofday - floor(timeofday)) * 60) - floor((timeofday - floor(timeofday)) * 60)) * 60, # decimal seconds
+                                         sep = ":"),
+                                   sep = " "),
+                         tz = "UTC"),
+  # TODO again check timestamp is UTC ####
+  Start = min(Timestamp, na.rm = TRUE), # for deployments, default populate with earliest possible date
+  Stop = as.POSIXct(datelastmodified, format = "%m/%d/%Y", tz = "UTC"), # for deployments, when receivers were downloaded
+  # TODO Can we/Yannis get colname info for FACT csvs?####
+  Receiver = as.integer(Receiver),
+  Group = stringr::str_to_title(dplyr::case_match(
+    commonname,
+    "bull shark" ~ "Bull",
+    .default = commonname)),
+  Signal = as.numeric(stringr::str_sub(string = tagname,
+                                       start = 10,
+                                       end = -1)),
+  Sensor.Unit = as.character(NA),
+  # TODO section: Retain releases as blanks - use receiver ####
+  # = Emily "Region", typically county
+  Section = "Ocean", # for spatial
+  # TODO Array assign to zones based on region; pull ####
+  # = Emily "Location", typically beach site or city
+  Array = "A1", # for spatial
+  Type = "Hydrophone" # for spatial
+) %T>% # spit out files an intermediary steps
   {. |> dplyr::arrange(Receiver) |> # FACT deployments file
       dplyr::group_by(Receiver, Station.name, Stop) |>
       dplyr::summarise_all(dplyr::first) |>
@@ -204,6 +303,9 @@ factDetections <- do.call(rbind, lapply(factfiles, read.csv)) |> # read & bind f
       dplyr::group_by(Station.name, Latitude, Longitude) |>
       dplyr::summarise_all(dplyr::first) ->> factSpatial} |>
   dplyr::select(Timestamp, Receiver, CodeSpace, Signal, Sensor.Unit, Group) # select only columns needed
+# TODO filter out non-yannis sharks via biometrics$acoustic_transmitter ####
+# Could do this elsewhere? FACT detections is only our animals
+# Or could/also do this for FACT detections as well to ensure we're not analysing other people's animals.
 rm(factfiles)
 
 # check overlap of factDetections with detections. Both have seconds
@@ -227,6 +329,7 @@ rm(factDetections)
 #                    Start = dplyr::first(Stop)) |>
 #   dplyr::filter(n > 1) |>
 #   dplyr::select(-n)
+# TODO confirm what this is doing ####
 factDeployments$Start[which(duplicated(x = factDeployments$Station.name))] <- factDeployments$Stop[which(duplicated(x = factDeployments$Station.name)) - 1]
 # tmp <- detections[which(duplicated(detections)),]
 
@@ -253,6 +356,11 @@ tmp <- deployments |> dplyr::mutate(timediff = Stop - Start) # check if any depl
 # tmp <- factDetections |> group_by(receiver_group, station) |> summarise(n = dplyr::n(), contact_pi = dplyr::first(contact_pi))
 # write.csv(x = tmp,file = file.path(loadloc, "FactStations.csv"), row.names = FALSE)
 
+# TODO use start & end time & receiver ID to left_join/overwrite Station.name for FACT deployments ####
+# Em might have code, inner_join
+live_buoy_detections <- live_buoy_detections %>%
+  inner_join(lb_log, by = "Receiver") %>%
+  filter(DateTimePT >= In_TimePT & DateTimePT <= Out_TimePT)
 
 
 
@@ -264,7 +372,7 @@ spatial <- readr::read_csv(file.path(loadloc, "actel", "spatial.csv")) |>
                   "Mg111" ~ "MG111",
                   .default = Station.name)) |>
   dplyr::bind_rows(factSpatial) |>
-  dplyr::group_by(Station.name) |> # dedupe stations
+  dplyr::group_by(Station.name) |> # dedupe stations, removes MG111 dupe
   dplyr::summarise_all(dplyr::first) #|>
 # Error: The following station is listed in the spatial file but no receivers were ever deployed there: 'Deep Ledge'
 # dplyr::filter(Station.name != "Deep Ledge")
@@ -273,23 +381,18 @@ spatial <- readr::read_csv(file.path(loadloc, "actel", "spatial.csv")) |>
 #           file = file.path(loadloc, "actel", "processed", "spatial_toFix.csv"),
 #           row.names = FALSE)
 
-#### Join spatial & FACT spatial ####
-spatial <- dplyr::bind_rows(spatial |> dplyr::mutate(Source = "spatial"),
-                            factSpatial |> dplyr::mutate(Source = "factSpatial")) |>
-  dplyr::arrange(Latitude, Longitude, Station.name) |>
-  dplyr::distinct(Latitude, Longitude, Station.name, .keep_all = TRUE) # 1 row from factSpatial added: MG111 with a slightly different location
 # TODO LatLon Dupes ####
+# Em's inner join code etc above should solve this
 # LatLon dupe 1/Governors Wrecks/St Jaques
 rm(factSpatial)
 
 # remove stations with no deployments (possibly due to not being downloaded thus removed)
 # Govenors wrecks, deep ledge, jupiter: all release sites (what's the point of release sites then?)
 spatial <- spatial |> dplyr::filter(Station.name %in% deployments$Station.name)
+# TODO make release site name = nearest receiver? ####
+# Dupe names should get solved by merging Station.name to receiver ID above
 
-# Remove stations with duplicated values
-spatial <- spatial |>
-  dplyr::filter(Source != "factSpatial") |> # this was MG111
-  dplyr::select(!Source) # not being used for anything now
+
 
 install.packages("gbm.auto")
 library(gbm.auto)
@@ -335,12 +438,10 @@ distances <- actel::distancesMatrix(
   # id.col = NULL,
   actel = FALSE
 )
-
+# TODO Colnames & rownames don't match due to Xs ####
+# Open bug on actel
 
 # Save objects ####
-dir.create(file.path(loadloc, "actel", "processed"))
-saveRDS(object = biometrics,
-        file = file.path(loadloc, "actel", "processed", "biometrics.Rds"))
 saveRDS(object = spatial,
         file = file.path(loadloc, "actel", "processed", "spatial.Rds"))
 saveRDS(object = deployments,
@@ -557,6 +658,8 @@ exploreResults <- actel::explore(datapack = mypreload,
                                  start.time = NULL, # Detection data prior to the timestamp set in start.time (in YYYY-MM-DD HH:MM:SS format) is not considered during the analysis
                                  stop.time = NULL, # ditto, posterior
                                  speed.method = c("last to first", "last to last", "first to first"),
+                                 # TODO add speed warnings see Yannis email ####
+                                 # And do in other functions below
                                  speed.warning = NULL, # warns if speed in m/s > this value. <= speed.error
                                  speed.error = NULL, # ditto but suggests user input
                                  jump.warning = 2, # warns if jumping arrays w/o detection
