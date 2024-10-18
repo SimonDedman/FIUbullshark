@@ -134,7 +134,9 @@ deployments <- readr::read_csv(file.path(loadloc, "actel",  "deployments.csv")) 
   dplyr::rename(Station.name = Station,
                 Receiver = "Receiver SN",
                 Start = In_ESTEDT,
-                Stop = Out_ESTEDT) |>
+                Stop = Out_ESTEDT,
+                Section = Region,
+                Array = Location) |>
   dplyr::mutate(
     Station.name = stringr::str_to_title(Station.name),
     Start = as.POSIXct(Start, format = "%d/%m/%Y %H:%M", tz = "America/New_York"),
@@ -218,16 +220,9 @@ detections <- do.call(rbind, lapply(csvfiles, read.csv)) |>
                                                        start = 6,
                                                        end = -1))) |>
   tidyr::drop_na(Signal) |>
-  # filter out non-yannis sharks (Signal) via biometrics$acoustic_transmitter
-  dplyr::filter(CodeSpaceSignal %in% unique(biometrics$CodeSpaceSignal)) |> # 124149 before, 1534 after
-  # FROMHERE 2024-10-17 SD ####
-  # Could do this elsewhere? FACT detections is only our animals
-  # Or could/also do this for FACT detections as well to ensure we're not analysing other people's animals.
+  # Filter out non-yannis sharks (Signal) ####
+dplyr::filter(CodeSpaceSignal %in% unique(biometrics$CodeSpaceSignal)) |> # 124149 before, 1534 after
   dplyr::select(Timestamp, Receiver, CodeSpace, Signal, CodeSpaceSignal, Sensor.Value, Sensor.Unit)
-
-
-unique(detections$CodeSpaceSignal) %in% unique(biometrics$CodeSpaceSignal)
-
 rm(csvfiles)
 
 # check overlap of old detections with new AllDetections
@@ -242,6 +237,18 @@ rm(csvfiles)
 # rm(AllDetectionsTmp)
 # rm(oldNotInNew)
 
+# Create/import lookup table of receivers, depthM, substrate, array, section
+# unique from deployments
+deployments |>
+  dplyr::select(Receiver, Latitude, Longitude, ReceiverDepthM, Substrate, Array, Section) |>
+  dplyr::group_by(Receiver) |>
+  dplyr::summarise(Latitude = mean(Latitude, na.rm = TRUE),
+                   Longitude = mean(Longitude, na.rm = TRUE),
+                   ReceiverDepthM = mean(ReceiverDepthM, na.rm = TRUE),
+                   Substrate = dplyr::first(Substrate, na_rm = TRUE),
+                   Array = dplyr::first(Array, na_rm = TRUE),
+                   Section = dplyr::first(Section, na_rm = TRUE)) |>
+  dplyr::ungroup()
 
 
 ### Read FACT detections ####
@@ -250,6 +257,18 @@ factfiles <- list.files(path = file.path(loadloc, "FACT"),
                         full.names = TRUE)
 
 library(magrittr)
+
+# tmp <- factDetections |>
+#   group_by(Receiver) |>
+#   summarise(nStation.name = length(unique(Station.name)),
+#             nStart = length(unique(Start)),
+#             nStop = length(unique(Stop)),
+#             nlat = length(unique(Latitude)),
+#             nlon = length(unique(Longitude)),
+#             nreceiver_depth = length(unique(receiver_depth)),
+#             nSection = length(unique(Section))
+#             ) # all 1s, thus can group on Receiver only for factDeployments
+# # 136423 & 136424 have 2 stops. Use distinct.
 
 factDetections <- do.call(rbind, lapply(factfiles, read.csv)) |> # read & bind files
   dplyr::select(!dplyr::where(~all(is.na(.)))) |> # remove blank columns
@@ -284,6 +303,10 @@ dplyr::mutate(
   Signal = as.numeric(stringr::str_sub(string = tagname,
                                        start = 10,
                                        end = -1)),
+  CodeSpace = as.integer(stringr::str_sub(string = CodeSpace,
+                                          start = 5,
+                                          end = 8)),
+  CodeSpaceSignal = paste(CodeSpace, Signal, sep = "-"),
   Sensor.Unit = as.character(NA),
   # TODO section: Retain releases as blanks - use receiver ####
   # = Emily "Region", typically county
@@ -292,20 +315,21 @@ dplyr::mutate(
   # = Emily "Location", typically beach site or city
   Array = "A1", # for spatial
   Type = "Hydrophone" # for spatial
-) %T>% # spit out files an intermediary steps
-  {. |> dplyr::arrange(Receiver) |> # FACT deployments file
-      dplyr::group_by(Receiver, Station.name, Stop) |>
-      dplyr::summarise_all(dplyr::first) |>
-      dplyr::select(Receiver, Station.name, Start, Stop) |>
-      dplyr::arrange(Station.name, Stop) ->> factDeployments} %T>% # export changes to deployments
+) |>
+  # Filter out non-yannis sharks (Signal) ####
+dplyr::filter(CodeSpaceSignal %in% unique(biometrics$CodeSpaceSignal)) %T>% # spit out files an intermediary steps
+  # 2424 before, 2424 after. FACT only send us our sharks.
+  {. |> dplyr::arrange(Receiver, Stop) |> # FACT deployments file
+      dplyr::mutate(Substrate = NA_character_,
+                    Array = NA_character_) |>
+      dplyr::rename(ReceiverDepthM = receiver_depth) |>
+      dplyr::select(Station.name, Receiver, Start, Stop, Latitude, Longitude, ReceiverDepthM, Substrate, Array, Section) |>
+      dplyr::distinct(.keep_all = TRUE) ->> factDeployments} %T>% # export changes to deployments
   {. |> dplyr::select(Station.name, Latitude, Longitude, Section, Array, Type) |> # FACT spatial file
       dplyr::arrange(Station.name) |>
       dplyr::group_by(Station.name, Latitude, Longitude) |>
       dplyr::summarise_all(dplyr::first) ->> factSpatial} |>
-  dplyr::select(Timestamp, Receiver, CodeSpace, Signal, Sensor.Unit, Group) # select only columns needed
-# TODO filter out non-yannis sharks via biometrics$acoustic_transmitter ####
-# Could do this elsewhere? FACT detections is only our animals
-# Or could/also do this for FACT detections as well to ensure we're not analysing other people's animals.
+  dplyr::select(Timestamp, Receiver, CodeSpace, Signal, CodeSpaceSignal, Sensor.Unit, Group) # select only columns needed
 rm(factfiles)
 
 # check overlap of factDetections with detections. Both have seconds
@@ -315,7 +339,7 @@ rm(factfiles)
 # tmp <- dplyr::bind_rows(detections |> dplyr::mutate(Source = "detections"),
 #                         factDetections |> dplyr::mutate(Source = "factDetections"))
 # rm(tmp)
-detections <- dplyr::bind_rows(detections, factDetections)
+detections <- dplyr::bind_rows(detections, factDetections) # 1534 + 2424 = 3958
 rm(factDetections)
 
 
@@ -323,21 +347,42 @@ rm(factDetections)
 ## Deployments file part 2 ####
 
 # overwrite start dates for stations with 2+ entries
+# Station 23 & 24, Receiver 136423 & 136424, have different stops each but same starts.
 # factDeployments |>
 #   dplyr::group_by(Station.name) |>
 #   dplyr::summarise(n = dplyr::n(),
 #                    Start = dplyr::first(Stop)) |>
 #   dplyr::filter(n > 1) |>
 #   dplyr::select(-n)
-# TODO confirm what this is doing ####
-factDeployments$Start[which(duplicated(x = factDeployments$Station.name))] <- factDeployments$Stop[which(duplicated(x = factDeployments$Station.name)) - 1]
-# tmp <- detections[which(duplicated(detections)),]
+factDeployments$Start[which(duplicated(x = factDeployments$Receiver))] <- factDeployments$Stop[which(duplicated(x = factDeployments$Receiver)) - 1]
+# Populate the duplicated (second) start row with the first (row-1) stop row date
 
 
 # join ours with FACT
 deployments <- deployments |>
-  dplyr::select(-Notes) |>
+  # dplyr::select(-Notes) |>
   dplyr::bind_rows(factDeployments)
+
+tmp <- deployments |>
+  # dplyr::group_by(Receiver) |>
+  # dplyr::summarise(nStation.name = length(unique(Station.name)),
+  #           nStart = length(unique(Start)),
+  #           nStop = length(unique(Stop)),
+  #           nlat = length(unique(Latitude)),
+  #           nlon = length(unique(Longitude)),
+  #           nReceiverDepthM = length(unique(ReceiverDepthM)),
+  #           nSection = length(unique(Section))
+  #           ) |>
+  # dplyr::ungroup() |>
+  # dplyr::filter(nStart > 1) # |> # tried dplyr::filter(dplyr::if_any(dplyr::across(nStation.name:nSection), ~ .x > 1)) # but no luck
+  # dplyr::pull(Receiver) # 136423 136424 138239 138240 487189 # 5 with multiple Starts & Stops, some have multiple depths, Sections, Lats, Lons, Station.names.
+  dplyr::select(Station.name, Receiver, Start, Stop, Latitude, Longitude, ReceiverDepthM, Substrate, Array, Section) |>
+  dplyr::distinct() |>
+  dplyr::arrange(Receiver, Stop) %T>%
+  write.csv(file.path(loadloc, "actel", "AllDetections.csv"), row.names = FALSE)
+# TODO need Array & Section ####
+# FROM HERE 2024-10-18 05:46 ####
+
 rm(factDeployments)
 # write.csv(x = deployments,
 #           file = file.path(loadloc, "actel", "processed", "deployments_toFix.csv"),
