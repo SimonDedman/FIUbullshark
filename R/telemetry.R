@@ -165,9 +165,6 @@ deployments <- readr::read_csv(file.path(loadloc, "actel",  "deployments.csv")) 
 #   dplyr::mutate(Signal = as.integer(stringr::str_sub(string = CodeSpace,
 #                                                      start = 10,
 #                                                      end = -1)),
-#                 # TODO codespace is middle 4 digits only ####
-#                 # Change here & elsewhere
-#                 # Copy & comment out original code in case new format kills the crab
 #                 CodeSpace = stringr::str_sub(string = CodeSpace,
 #                                              start = 5,
 #                                              end = 8),
@@ -193,6 +190,13 @@ deployments <- readr::read_csv(file.path(loadloc, "actel",  "deployments.csv")) 
 
 # TODO find out if vrl2csv corrects for clock drift ####
 # If not Em has a tool in R
+# To create a CSV for time-corrected VRL files, first time-correct each file using the VRL editor in VUE (under Tools menu).
+# To speed up that process, uncheck the "Import" checkbox next to each filename,
+# then run `vrl2csv` to create a CSV for each edited (e.g. time-corrected) VRL.
+
+# TODO swap VRL ingestion source ####
+# for detections/detection-data_FWC-bull-Shark_20240923_01.csv
+
 
 # TODO code this to only convert new VRL files which haven't yet been converted ####
 # Query against deployment log for deployments$Filename
@@ -220,8 +224,6 @@ detections <- do.call(rbind, lapply(csvfiles, read.csv)) |>
                                                        start = 6,
                                                        end = -1))) |>
   tidyr::drop_na(Signal) |>
-  # Filter out non-yannis sharks (Signal) ####
-dplyr::filter(CodeSpaceSignal %in% unique(biometrics$CodeSpaceSignal)) |> # 124149 before, 1534 after
   dplyr::select(Timestamp, Receiver, CodeSpace, Signal, CodeSpaceSignal, Sensor.Value, Sensor.Unit)
 rm(csvfiles)
 
@@ -315,9 +317,7 @@ dplyr::mutate(
   # = Emily "Location", typically beach site or city
   Array = "A1", # for spatial
   Type = "Hydrophone" # for spatial
-) |>
-  # Filter out non-yannis sharks (Signal) ####
-dplyr::filter(CodeSpaceSignal %in% unique(biometrics$CodeSpaceSignal)) %T>% # spit out files an intermediary steps
+) %T>% # spit out files an intermediary steps
   # 2424 before, 2424 after. FACT only send us our sharks.
   {. |> dplyr::arrange(Receiver, Stop) |> # FACT deployments file
       dplyr::mutate(Substrate = NA_character_,
@@ -339,7 +339,15 @@ rm(factfiles)
 # tmp <- dplyr::bind_rows(detections |> dplyr::mutate(Source = "detections"),
 #                         factDetections |> dplyr::mutate(Source = "factDetections"))
 # rm(tmp)
-detections <- dplyr::bind_rows(detections, factDetections) # 1534 + 2424 = 3958
+detections <- detections |>
+  dplyr::bind_rows(detections, factDetections) %T>% # 1534 + 2424 = 3958
+{saveRDS(object = .,file = file.path(loadloc,
+                                     "actel",
+                                     paste0("detections_FWCbullShark_",
+                                            as.Date(max(.$Timestamp, na.rm = TRUE)))))} |>
+  # TODO test this ####
+# Filter out non-Yannis sharks (Signal) ####
+dplyr::filter(CodeSpaceSignal %in% unique(biometrics$CodeSpaceSignal)) |> # 124149 before, 1534 after
 rm(factDetections)
 
 
@@ -382,6 +390,9 @@ tmp <- deployments |>
   write.csv(file.path(loadloc, "actel", "AllDetections.csv"), row.names = FALSE)
 # TODO need Array & Section ####
 # FROM HERE 2024-10-18 05:46 ####
+# Could group by depth, 80ft +, 60-80ft, and < 60ft
+
+# AllDetections: stationname clean, use this instead, here & elsewhere. Left_join station_log to ours 7 fact files everywhere ####
 
 rm(factDeployments)
 # write.csv(x = deployments,
@@ -406,7 +417,11 @@ tmp <- deployments |> dplyr::mutate(timediff = Stop - Start) # check if any depl
 live_buoy_detections <- live_buoy_detections %>%
   inner_join(lb_log, by = "Receiver") %>%
   filter(DateTimePT >= In_TimePT & DateTimePT <= Out_TimePT)
+# Obviated by left_join earlier up
 
+
+# TODO factor order Array & Section by (average) Latitude ####
+# In all places where this occurs
 
 
 ## Spatial file ####
@@ -417,6 +432,7 @@ spatial <- readr::read_csv(file.path(loadloc, "actel", "spatial.csv")) |>
                   "Mg111" ~ "MG111",
                   .default = Station.name)) |>
   dplyr::bind_rows(factSpatial) |>
+  # Use distinct, ungroup, is obviated by left_join? ####
   dplyr::group_by(Station.name) |> # dedupe stations, removes MG111 dupe
   dplyr::summarise_all(dplyr::first) #|>
 # Error: The following station is listed in the spatial file but no receivers were ever deployed there: 'Deep Ledge'
