@@ -58,7 +58,6 @@ biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
                               tz = "America/New_York"),
     Release.date = lubridate::with_tz(Release.date, tzone = "UTC"), # change to UTC
     tag_location = stringr::str_to_title(tag_location),
-<<<<<<< HEAD
     # species = stringr::str_to_title(species),
     # create 'max 6 character' species/Group alternative
     Group = dplyr::case_match(
@@ -66,9 +65,6 @@ biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
       "Caribbean reef" ~ "Crb_Rf",
       "Sandbar" ~ "Sndbar",
       .default = species), # "Bull"
-=======
-    species = stringr::str_to_title(species),
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
     sex = dplyr::case_match(
       sex,
       "M" ~ "Male",
@@ -85,19 +81,12 @@ biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
     pectoral_fin_girth_cm = as.numeric(pectoral_fin_girth_cm),
     dorsal_fin_girth_cm = as.numeric(dorsal_fin_girth_cm),
     weight_kg = as.numeric(weight_kg),
-<<<<<<< HEAD
     # M: No Code.space column was found in the biometrics. Assigning code spaces based on detections
     # But called CodeSpace in online help?
     Code.space = as.integer(stringr::str_sub(string = acoustic_transmitter,
                                             start = 5,
                                             end = 8)),
     CodeSpaceSignal = paste(Code.space, acoustic_transmitter_ID, sep = "-"),
-=======
-    CodeSpace = as.integer(stringr::str_sub(string = acoustic_transmitter,
-                                            start = 5,
-                                            end = 8)),
-    CodeSpaceSignal = paste(CodeSpace, acoustic_transmitter_ID, sep = "-"),
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
     acoustic_transmitter_ID = as.integer(acoustic_transmitter_ID),
     ID_tag_leader_number = as.integer(ID_tag_leader_number),
     ID_tag_side = as.character(ID_tag_side),
@@ -119,11 +108,7 @@ biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
                 # Does anything use release site/blank cells in other sheets?
                 # Existing columns length, weight, mass: distribution graphics drawn per animal group in report.
                 # length = Length.mm
-<<<<<<< HEAD
                 # Group = species,
-=======
-                Group = species,
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
                 Latitude = latitude,
                 Longitude = longitude,
                 Sex = sex,
@@ -143,123 +128,18 @@ biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
     capture_depth_m,
     Group,
     Sex:acoustic_transmitter,
-<<<<<<< HEAD
     Code.space,
-=======
-    CodeSpace,
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
     Signal,
     CodeSpaceSignal:Notes
   )
 dir.create(file.path(loadloc, "actel", "processed"))
 saveRDS(object = biometrics, file = file.path(loadloc, "actel", "processed", "biometrics.Rds"))
-<<<<<<< HEAD
-=======
 
 
 
 
 
 
-
-
-
-## 2. Spatial file ####
-
-# Left_join station_log to ours & fact files everywhere
-stationLog <- readr::read_csv(file = file.path(loadloc, "actel", "Station_log.csv"))
-# TODO rename stationLog to spatial everywhere ####
-
-# Remove this whole block, obseleted by stationLog
-spatial <- readr::read_csv(file.path(loadloc, "actel", "spatial.csv")) |>
-  dplyr::mutate(Station.name = stringr::str_to_title(Station.name),
-                Station.name = dplyr::case_match(
-                  Station.name,
-                  "Mg111" ~ "MG111",
-                  .default = Station.name)) |>
-  # if spatial.csv obviated by stationLog, don't need factSpatial ####
-  dplyr::bind_rows(factSpatial) |>
-  # Use distinct, ungroup, is obviated by left_join? ####
-dplyr::group_by(Station.name) |> # dedupe stations, removes MG111 dupe
-  dplyr::summarise_all(dplyr::first) |>
-  # remove stations with no deployments (possibly due to not being downloaded thus removed)
-  # Govenors wrecks, deep ledge, jupiter: all release sites (what's the point of release sites then?)
-  dplyr::filter(Station.name %in% deployments$Station.name) |>
-  dplyr::ungroup()
-saveRDS(object = spatial, file = file.path(loadloc, "actel", "processed", "spatial.Rds"))
-
-# Error: The following station is listed in the spatial file but no receivers were ever deployed there: 'Deep Ledge'
-# dplyr::filter(Station.name != "Deep Ledge")
-# St Jaques, Governors Wrecks, 1, all same latlon
-rm(factSpatial)
-
-
-
-# TODO make release site name = nearest receiver? ####
-# Dupe names should get solved by merging Station.name to receiver ID above
-
-
-## gbm.auto basemap & raster ####
-install.packages("gbm.auto")
-library(gbm.auto)
-# create shapefile and respective auxiliary files in the folder where you have your 'spatial.csv'.
-dir.create(file.path(loadloc, "actel", "NOAAcoastlines"))
-basemap <- gbm.auto::gbm.basemap(bounds = c(min(spatial$Longitude),
-                                            max(spatial$Longitude),
-                                            min(spatial$Latitude),
-                                            max(spatial$Latitude)),
-                                 savedir = file.path(loadloc, "actel", "NOAAcoastlines"),
-                                 extrabounds = TRUE)
-# convert to raster
-base.raster <- actel::shapeToRaster(shape = file.path(loadloc, "actel", "NOAAcoastlines", "CroppedMap", "Crop_Map.shp"), # path to your shapefile, including the ".shp" extension
-                                    size = 0.01, # of the raster pixels in metres (or possibly 100km's)
-                                    spatial = spatial, # " character string specifying the path to a spatial.csv file or a spatial data frame
-                                    coord.x = "Longitude", # names of the columns containing the x and y coordinates
-                                    coord.y = "Latitude",
-                                    buffer = NULL) # request an expansion of the shapefile limits
-saveRDS(object = base.raster, file = file.path(loadloc, "actel", "processed", "base.raster.Rds"))
-# base.raster <- readRDS(file = file.path(loadloc, "actel", "processed", "base.raster.Rds"))
-
-# could use gbm.auto code to do this easily if Hugo wants, depending on how it goes for me.
-raster::plot(base.raster)
-points(x = spatial$Longitude,
-       y = spatial$Latitude,
-       pch = 20,
-       col = "red")
-
-## Create transition layer ####
-t.layer <- actel::transitionLayer(base.raster,
-                                  directions = 16)
-# shapeToRaster$size = 0.001 crashed Rstudio
-saveRDS(object = t.layer, file = file.path(loadloc, "actel", "processed", "t.layer.Rds"))
-# t.layer <- readRDS(file = file.path(loadloc, "actel", "processed", "t.layer.Rds"))
-
-# 3. Distances file ####
-# https://hugomflavio.github.io/actel-website/manual-distances.html
-# create a shapefile that extends over all your receivers and release sites
-distances <- actel::distancesMatrix(
-  t.layer = t.layer,
-  starters = spatial,
-  targets = spatial,
-  coord.x = "Longitude",
-  coord.y = "Latitude",
-  # id.col = "Station.name",
-  actel = FALSE
-)
-# Colnames & rownames don't match due to Xs
-# bug on actel: https://github.com/hugomflavio/actel/issues/129
-# spatial <- spatial |> dplyr::mutate(Station.name = stringr::str_replace_all(string = Station.name, pattern = " ", replacement = "_"))
-colnames(distances) <- spatial$Station.name
-rownames(distances) <- spatial$Station.name
-saveRDS(object = distances, file = file.path(loadloc, "actel", "processed", "distances.Rds"))
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
-
-
-
-
-
-
-<<<<<<< HEAD
 
 
 
@@ -370,8 +250,6 @@ saveRDS(object = distances, file = file.path(loadloc, "actel", "processed", "dis
 
 
 
-=======
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
 ## 4. Detections file ####
 
 ### FWCdepredationStudy file ####
@@ -571,11 +449,7 @@ saveRDS(object = detections, file = file.path(loadloc, "actel", "processed", "de
 
 
 
-<<<<<<< HEAD
 ## 5a. Deployments file: our csv ####
-=======
-## 5. Deployments file ####
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
 deployments <- readr::read_csv(file.path(loadloc, "actel",  "deployments.csv")) |>
   dplyr::rename(Station.name = Station,
                 Receiver = "Receiver SN",
@@ -600,11 +474,7 @@ deployments <- readr::read_csv(file.path(loadloc, "actel",  "deployments.csv")) 
 
 
 
-<<<<<<< HEAD
 ## 5b. Deployments file: join FACT ####
-=======
-## 5b. Deployments file part 2 ####
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
 
 # overwrite start dates for stations with 2+ entries
 # Station 23 & 24, Receiver 136423 & 136424, have different stops each but same starts.
@@ -624,11 +494,7 @@ deployments <- deployments |>
   dplyr::bind_rows(factDeployments) |> # join ours with FACT
   # Left_join station log details
   dplyr::select(-ReceiverDepthM, -Substrate, -Array, -Section) |>
-<<<<<<< HEAD
   dplyr::left_join(spatial |>
-=======
-  dplyr::left_join(stationLog |>
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
                      dplyr::select(Station.name.clean, ReceiverDepthM, Substrate, Section, Array, Type) |>
                      dplyr::rename(Station.name = Station.name.clean) |>
                      dplyr::distinct(Station.name, .keep_all = TRUE),
@@ -674,13 +540,8 @@ rm(factDeployments)
 # princess Anne / 3: no date overlap. Should fix name?
 # St Jaques / 1 / MG111: No overlap first 2, 1/MG111 date overlap 4 days. Should fix name?
 # deployments[deployments$Receiver == 139043 & deployments$Station.name == "Princess Anne", "Start"] <- deployments[deployments$Receiver == 138239 & deployments$Station.name == "Princess Anne", "Stop"] # Already in correct state
-<<<<<<< HEAD
 # 2nd receiver deployed while first still present, check, prefixed, remove
 # deployments[deployments$Receiver == 138240 & deployments$Station.name == "MG111", "Start"] <- deployments[deployments$Receiver == 138240 & deployments$Station.name == "1", "Stop"]
-=======
-# TODO 2nd receiver deployed while first still present, check ####
-deployments[deployments$Receiver == 138240 & deployments$Station.name == "MG111", "Start"] <- deployments[deployments$Receiver == 138240 & deployments$Station.name == "1", "Stop"]
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
 # tmp <- deployments |> dplyr::mutate(timediff = Stop - Start) # check if any deployments stop before they start
 
 # Do we have a download date?
@@ -879,7 +740,6 @@ mypreload <- actel::preload(biometrics = biometrics,
 
 
 
-<<<<<<< HEAD
 # 2024-10-06
 # M: Preloaded Release dates are already in POSIX format. Skipping timestamp format checks.
 # M: No Code.space column was found in the biometrics. Assigning code spaces based on detections.
@@ -888,9 +748,6 @@ mypreload <- actel::preload(biometrics = biometrics,
 # M: Preloaded deployment times are already in POSIX format. Skipping timestamp format checks.
 # Error: The 'Station.name' column in the spatial input must not have duplicated values.
 # Stations appearing more than once: GNWR, HRFN
-=======
-
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
 
 
 
@@ -911,16 +768,9 @@ exploreResults <- actel::explore(datapack = mypreload,
                                  start.time = NULL, # Detection data prior to the timestamp set in start.time (in YYYY-MM-DD HH:MM:SS format) is not considered during the analysis
                                  stop.time = NULL, # ditto, posterior
                                  speed.method = c("last to first", "last to last", "first to first"),
-<<<<<<< HEAD
                                  # And do in other functions below
                                  speed.warning = 1, # NULL; warns if speed in m/s > this value. <= speed.error. See Yannis email 2024-10-01 "Bull shark data cleaning questions"
                                  speed.error = 3, # ditto but suggests user input
-=======
-                                 # TODO add speed warnings see Yannis email ####
-                                 # And do in other functions below
-                                 speed.warning = NULL, # warns if speed in m/s > this value. <= speed.error
-                                 speed.error = NULL, # ditto but suggests user input
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
                                  jump.warning = 2, # warns if jumping arrays w/o detection
                                  jump.error = 3, # ditto, errors
                                  inactive.warning = NULL, # n days inactive
@@ -932,11 +782,7 @@ exploreResults <- actel::explore(datapack = mypreload,
                                  discard.orphans = FALSE, # detections outside receiver deployment periods or before animal release dates
                                  discard.first = NULL, # hours after release to begin counting detections as valid
                                  save.detections = FALSE, # save processed detections for future runs?
-<<<<<<< HEAD
                                  # HUGO NOTE: manpage unclear why user would want this
-=======
-                                 ## HUGO NOTE: manpage unclear why user would want this ####
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
                                  # https://github.com/hugomflavio/actel/issues/111
                                  GUI = c("needed", "always", "never"),
                                  save.tables.locally = FALSE, # only if too big for R console/whenever possibility to invalidate events/never
@@ -1036,7 +882,6 @@ residencyResults <- actel::residency(
 # Warning: Tag A69-9001-52511 (5/11) has fewer than 2 detections in total. Discarding this tag.
 
 
-<<<<<<< HEAD
 # TODO list ####
 # 2024-11-06
 # Error: The 'Station.name' column in the spatial input must not have duplicated values.
@@ -1056,8 +901,3 @@ residencyResults <- actel::residency(
 # Thus tuning models online.
 # This page could be a full dashboard of results options; see semi-recent Dancho lesson I tried [SD note to self]
 # Host on github.io for this project
-=======
-
-# TODO ####
-# All stations being Array==A1 & Section==Ocean disallows actel from doing much useful. Change in spatial
->>>>>>> 13d651aca47c97154f2481e8b2380fa6a9665569
