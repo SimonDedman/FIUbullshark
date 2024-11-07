@@ -84,8 +84,8 @@ biometrics <- readr::read_csv(file.path(loadloc, "actel", "biometrics.csv")) |>
     # M: No Code.space column was found in the biometrics. Assigning code spaces based on detections
     # But called CodeSpace in online help?
     Code.space = as.integer(stringr::str_sub(string = acoustic_transmitter,
-                                            start = 5,
-                                            end = 8)),
+                                             start = 5,
+                                             end = 8)),
     CodeSpaceSignal = paste(Code.space, acoustic_transmitter_ID, sep = "-"),
     acoustic_transmitter_ID = as.integer(acoustic_transmitter_ID),
     ID_tag_leader_number = as.integer(ID_tag_leader_number),
@@ -147,17 +147,6 @@ saveRDS(object = biometrics, file = file.path(loadloc, "actel", "processed", "bi
 
 # Left_join station_log to ours & fact files everywhere
 spatial <- readr::read_csv(file = file.path(loadloc, "actel", "Station_log.csv")) |>
-  # dplyr::mutate(
-    # Station.name = dplyr::case_when(
-    #   "Cross Current Barge" ~ "CCBrge",
-    #   "Deep Ledge" ~ "DpLedg",
-    #   "Jupiter" ~ "Jupitr",
-    #   "Princess Anne" ~ "PrncsA",
-    #   "Rubble Pile" ~ "RublPl",
-    #   "St Jaques" ~ "StJaqs",
-    #   .default = Station.name
-    # )
-  # )
   dplyr::select(-Station.name) |>
   dplyr::rename(Station.name = Station.name.clean)
 
@@ -178,7 +167,6 @@ spatial <- readr::read_csv(file = file.path(loadloc, "actel", "Station_log.csv")
 #   dplyr::filter(Station.name %in% deployments$Station.name) |>
 #   dplyr::ungroup()
 saveRDS(object = spatial, file = file.path(loadloc, "actel", "processed", "spatial.Rds"))
-spatial <- readRDS(file = file.path(loadloc, "actel", "processed", "spatial.Rds"))
 
 # Error: The following station is listed in the spatial file but no receivers were ever deployed there: 'Deep Ledge'
 # dplyr::filter(Station.name != "Deep Ledge")
@@ -489,14 +477,35 @@ factDeployments$Start[which(duplicated(x = factDeployments$Receiver))] <- factDe
 
 
 # join ours with FACT
-deployments <- deployments |>
+
+tmp <- deployments |> # deployments <-
+  # clean up names
+  dplyr::mutate(
+    Station.name = dplyr::case_match(
+      Station.name,
+      "Cross Current Barge" ~ "CCBrge",
+      "Deep Ledge" ~ "DpLedg",
+      "Jupiter" ~ "Jupitr",
+      "Princess Anne" ~ "PrncsA",
+      "Rubble Pile" ~ "RublPl",
+      "St Jaques" ~ "StJaqs",
+      .default = Station.name
+    )
+  ) |>
   # dplyr::select(-Notes) |>
   dplyr::bind_rows(factDeployments) |> # join ours with FACT
   # Left_join station log details
   dplyr::select(-ReceiverDepthM, -Substrate, -Array, -Section) |>
   dplyr::left_join(spatial |>
-                     dplyr::select(Station.name.clean, ReceiverDepthM, Substrate, Section, Array, Type) |>
-                     dplyr::rename(Station.name = Station.name.clean) |>
+                     dplyr::select(Station.name, ReceiverDepthM, Substrate, Section, Array, Type) |>
+                     # TODO ####
+                     # if we use distinct, doesn't that remove legit second deployments to the same Station.name?
+                     # GNWR has 2 with different Receivers, both of which Start on the same date, but Stop different.
+                     # MG111 deployment 2 starts before the first deployment stops
+                     # PBR2 2 deployments, same Start & Stop, but different Receivers
+                     # RHRF has 2 with different Receivers, both of which Start on the same date, but Stop different.
+                     # StJaqs has 2 different Receivers, distinct Start & Stop, don't want to Distinct
+                     # THSO has 2 with different Receivers, both of which Start on the same date, but Stop different.
                      dplyr::distinct(Station.name, .keep_all = TRUE),
                    by = "Station.name") |>
   # factor order Section & Array by (average) Latitude
